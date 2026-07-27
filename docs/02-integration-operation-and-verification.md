@@ -2,11 +2,11 @@
 
 ## 1. RocketCore and RoCC
 
-The accelerator is integrated into RocketCore through the Rocket Custom Coprocessor interface.
+The OS8 accelerator is integrated with RocketCore through the **Rocket Custom Coprocessor (RoCC)** interface.
 
-RoCC allows custom RISC-V instructions to invoke a tightly coupled accelerator while RocketCore remains responsible for normal program execution.
+RoCC allows custom RISC-V instructions to invoke a tightly coupled hardware accelerator while RocketCore remains responsible for normal program execution and workload management.
 
-The software path is:
+The command path is:
 
 ```text
 C program
@@ -24,21 +24,21 @@ OS8 controller
 systolic datapath
 ```
 
-![alt text](image-13.png)
+![RocketCore custom-instruction command path to the OS8 accelerator](../assets/image-13.png)
 
 ### Command Fields
 
-The accelerator uses the `custom0` opcode space.
+The accelerator uses the RISC-V `custom0` opcode space.
 
-The important fields are:
+The relevant instruction fields are:
 
-- `funct7` — command selector,
-- `rs1` — pointer or configuration value,
-- `rd` — destination register when a response is required,
+- `funct7` — selects the accelerator command,
+- `rs1` — carries a pointer or configuration value,
+- `rd` — identifies the destination register when a response is required,
 - `rs2` — unused,
 - `funct3` — fixed to `000`.
 
-At the accelerator boundary:
+At the accelerator interface:
 
 ```text
 funct7 → cmd_funct
@@ -52,15 +52,17 @@ A command is accepted when:
 cmd_valid && cmd_ready
 ```
 
-are asserted together.
+are asserted during the same cycle.
+
+This valid-ready handshake ensures that RocketCore only transfers a command when the accelerator is able to accept it.
 
 ---
 
 ## 2. Custom Instruction Map
 
-## RoCC Custom Instruction Encoding
+The OS8 accelerator uses the RISC-V `custom0` opcode, encoded as `0001011`, for all accelerator commands.
 
-The OS8 accelerator uses the RISC-V `custom0` opcode space for its RoCC commands.
+The `funct7` field distinguishes the individual operations.
 
 | [31:25] funct7 | [24:20] rs2 | [19:15] rs1 | [14:12] funct3 | [11:7] rd | [6:0] opcode | Operation |
 |---|---|---|---|---|---|---|
@@ -76,59 +78,100 @@ The OS8 accelerator uses the RISC-V `custom0` opcode space for its RoCC commands
 | `0001100` | unused | unused | `000` | response destination register | `0001011` | Load A and B tiles only |
 | `0001101` | unused | unused | `000` | response destination register | `0001011` | Compute and store C tile only |
 
-The separated operating modes are important because they allow the accelerator to keep one operand resident while another operand changes.
+The separated load, compute and store commands allow previously loaded operand tiles to remain resident inside the accelerator.
+
+This enables explicit operand reuse without changing the underlying output-stationary PE dataflow.
 
 ---
 
 ## 3. Complete Operation Flow
 
-The overall execution sequence is:
+At the software level, matrix multiplication is divided into operations that can be executed by the fixed 8×8 accelerator.
 
-1. Software creates the workload.
-2. The matrix is divided into 8×8 tiles.
-3. Incomplete tiles are zero-padded.
-4. Software provides A, B and C addresses.
-5. Optional activation configuration is sent.
-6. An execution command is issued.
-7. The controller loads the required matrices.
-8. `os8_sa` starts the systolic computation.
-9. The PE mesh performs the MAC operations.
-10. Completed carry-save results propagate to the final CPA stage.
-11. C values are captured.
-12. Arithmetic shift and optional ReLU are applied.
-13. C is written to memory.
-14. A RoCC response is returned.
-15. Software schedules the next tile if required.
+A complete accelerator operation follows this sequence:
 
-[Figure 3.3 from report — Operation flow of RoCC-integrated accelerator]
+1. Software prepares the input matrices.
+2. Larger matrices are divided into 8×8 tiles.
+3. Incomplete edge tiles are zero-padded.
+4. Software provides the A, B and C buffer addresses.
+5. Optional activation configuration is provided.
+6. Software issues an execution command.
+7. The controller loads the required A and B tile data.
+8. `os8_sa` begins systolic-array computation.
+9. The 8×8 PE mesh performs the MAC operations.
+10. Completed carry-save results propagate toward the final CPA stage.
+11. Final C values are captured.
+12. Arithmetic right shift and optional ReLU are applied.
+13. C results are written to memory.
+14. The accelerator returns a RoCC response.
+15. Software proceeds to the next tile operation when required.
 
-This division keeps the hardware fixed while allowing software to support arbitrary matrix dimensions.
+Conceptually:
+
+```text
+Software
+   │
+   │ A/B/C addresses + configuration
+   ▼
+RoCC Command
+   │
+   ▼
+Command Registers
+   │
+   ▼
+Controller
+   │
+   ├── Load A
+   ├── Load B
+   │
+   ▼
+Systolic Array
+   │
+   ├── Compute
+   ├── Carry-save propagation
+   └── Final CPA
+   │
+   ▼
+Activation / Shift
+   │
+   ▼
+Store C
+   │
+   ▼
+RoCC Response
+```
+
+This arrangement keeps the hardware datapath fixed while software manages matrices of different dimensions.
 
 ---
 
 ## 4. Matrix Tiling and Zero Padding
 
-The physical array always processes an 8×8 tile.
+The physical OS8 array always operates on an 8×8 tile.
 
-For a matrix smaller than 8×8:
+For a matrix smaller than 8×8, the valid matrix is placed within a complete tile and the unused entries are set to zero:
 
 ```text
-valid values + zeros → complete 8×8 tile
+valid matrix values + zero padding → 8×8 hardware tile
 ```
 
-For larger matrices, software repeatedly creates A and B tiles.
+For matrices larger than 8×8, software divides the workload into multiple A and B tiles and invokes the accelerator repeatedly.
 
-For an incomplete edge tile, unused entries are set to zero so that the hardware does not need variable-size control logic.
+For example, a matrix dimension larger than eight may require several tile operations along each dimension.
 
-This simplifies RTL at the cost of some wasted computation at partially occupied edges.
+Incomplete edge tiles are zero-padded before being sent to the accelerator.
 
-The tiling behaviour is also responsible for the repeated speedup pattern discussed in the performance documentation.
+This allows the hardware to retain a fixed 8×8 architecture without adding variable-size matrix control logic.
+
+The trade-off is that PEs corresponding to padded positions perform operations on zeros.
+
+This tiling behaviour also contributes to the performance pattern observed across different matrix dimensions, particularly when a matrix size crosses an 8-element tile boundary.
 
 ---
 
 ## 5. B-Matrix Reuse
 
-The baseline operation is:
+The complete accelerator operation can execute:
 
 ```text
 Load A
@@ -137,276 +180,265 @@ Compute
 Store C
 ```
 
-for each tile operation.
+for every tile.
 
-The separated commands allow:
+However, the separate command modes allow these stages to be controlled independently.
+
+If the same B tile is required for several operations, it can remain resident inside the accelerator.
+
+For example:
 
 ```text
-Load B once
+Load B
 
 Load A1
-Compute + Store
+Compute + Store C1
 
 Load A2
-Compute + Store
+Compute + Store C2
 
 Load A3
-Compute + Store
+Compute + Store C3
 ```
 
-The same B tile remains stored inside the accelerator.
+Instead of:
 
-This models an inference-style workload where the same weights are applied to multiple input activation matrices.
+```text
+Load A1
+Load B
+Compute
+Store C1
 
-This reuse is a controller/software-level optimisation.
+Load A2
+Load B
+Compute
+Store C2
 
-It does **not** convert the PE array from output-stationary to weight-stationary dataflow.
+Load A3
+Load B
+Compute
+Store C3
+```
+
+The second and subsequent operations therefore avoid repeatedly loading the same B tile.
+
+This models an inference-style workload in which a set of weights may be reused across multiple input activation tiles.
+
+The optimisation occurs at the **controller and software scheduling level**.
+
+The PE array itself remains output-stationary: partial outputs remain associated with their PEs during computation while A and B values move through the array.
 
 ---
 
 ## 6. Scala / Chisel Integration
 
-The SystemVerilog accelerator is attached to Rocket Chip through a thin Scala/Chisel layer.
+The SystemVerilog accelerator is attached to Rocket Chip through a thin Scala/Chisel integration layer.
+
+The repository places these integration files in the `rocc/` directory.
 
 ### `os8_matmul.scala`
 
-Defines the RoCC accelerator at tile level.
+Defines the accelerator on the Rocket/RoCC side.
 
-It connects the Rocket-side RoCC:
+It connects the relevant RoCC interfaces to the SystemVerilog implementation, including:
 
 - command channel,
 - response channel,
 - memory path,
-- busy signal,
-
-to the SystemVerilog blackbox.
+- busy status.
 
 ### `os8_wrapper.scala`
 
-Declares the Chisel `BlackBox` corresponding to `os8_wrapper.sv`.
+Declares the Chisel `BlackBox` corresponding to the SystemVerilog `os8_wrapper`.
 
-It exposes the SystemVerilog ports to the Rocket/Chisel environment.
+It exposes the RTL accelerator ports to the Chisel/Rocket environment and allows the SystemVerilog implementation to be included in the generated design.
 
 ### `Configs.scala`
 
-Defines the `BuildRoCC` attachment and connects OS8 using `OpcodeSet.custom0`.
+Defines the RoCC attachment using:
+
+```text
+OpcodeSet.custom0
+```
+
+and associates the OS8 accelerator with the RocketCore configuration.
 
 ### `RocketConfigs.scala`
 
-Defines the final RocketCore configuration containing the OS8 accelerator.
+Defines the RocketCore configuration that includes OS8.
 
-The project originally placed these files under the relevant Chipyard/Rocket Chip source directories, while this repository groups them by function for readability.
+The original project placed these files within the appropriate Chipyard and Rocket Chip source directories.
 
----
-
-## 7. Verification Strategy
-
-Verification was carried out in layers.
-
-```text
-individual RTL module
-        ↓
-integrated hardware blocks
-        ↓
-complete RocketCore + RoCC + OS8 system
-        ↓
-software reference comparison
-```
-
-This makes debugging easier because each hardware block is checked before relying on full system integration.
+This repository instead groups the accelerator-related integration files together under `rocc/` so that the complete modification can be inspected without navigating the larger Chipyard source tree.
 
 ---
 
-## 8. Module-Level Verification
+## 7. RTL Verification
 
-The following RTL blocks were verified individually:
+Individual OS8 RTL modules were verified using dedicated SystemVerilog testbenches before full RocketCore integration.
 
-- `os8_pe`
-- `os8_activation_unit`
-- `os8_final_cpa`
-- `os8_delay_mem`
-- `os8_pe_mesh`
-- `os8_sa`
-- `os8_rocc_cmd_regs`
-- `os8_controller`
-
-### PE Verification
-
-The PE test cases include:
-
-- clear behaviour,
-- positive multiplication,
-- signed multiplication,
-- carry-save propagation.
-
-Examples include:
+The testbench source files are stored in the repository under:
 
 ```text
-3 × 4 → 12
--2 × 5 → -10
-77 + 3 propagation pair → 80
+verification/
 ```
 
-[Figure 4.1 from report — Annotated waveform for `os8_pe.sv`]
-
-### Activation Verification
-
-The activation unit tests:
+The available testbenches are:
 
 ```text
-64 >>> 0 = 64
-64 >>> 2 = 16
--32 >>> 1 = -16
-ReLU(-16) = 0
+verification/
+├── tb_os8_activation_unit.sv
+├── tb_os8_controller.sv
+├── tb_os8_delay_mem.sv
+├── tb_os8_final_cpa.sv
+├── tb_os8_pe.sv
+├── tb_os8_pe_mesh.sv
+├── tb_os8_rocc_cmd_regs.sv
+├── tb_os8_sa.sv
+└── tb_os8_wrapper.sv
 ```
 
-[Figure 4.2 from report — Annotated waveform for `os8_activation_unit.sv`]
+Each testbench corresponds to a major RTL block and is used to exercise that module independently.
 
-### Final CPA Verification
+| Testbench | Module under test |
+|---|---|
+| `tb_os8_activation_unit.sv` | `os8_activation_unit` |
+| `tb_os8_controller.sv` | `os8_controller` |
+| `tb_os8_delay_mem.sv` | `os8_delay_mem` |
+| `tb_os8_final_cpa.sv` | `os8_final_cpa` |
+| `tb_os8_pe.sv` | `os8_pe` |
+| `tb_os8_pe_mesh.sv` | `os8_pe_mesh` |
+| `tb_os8_rocc_cmd_regs.sv` | `os8_rocc_cmd_regs` |
+| `tb_os8_sa.sv` | `os8_sa` |
+| `tb_os8_wrapper.sv` | `os8_wrapper` |
 
-The final CPA is checked with:
+This module-level verification allows arithmetic, timing, control and data-movement behaviour to be checked before the accelerator is tested as part of the complete processor system.
 
-- positive addition,
-- larger values,
-- negative two's-complement values,
-- wraparound behaviour.
-
-[Figure 4.3 from report — Annotated waveform for `os8_final_cpa.sv`]
-
-### Delay-Memory Verification
-
-The delay-memory tests confirm that matrix lanes appear at the output with progressively increasing delays.
-
-This verifies the staggered wavefront.
-
-[Figure 4.4 from report — Annotated waveform for `os8_delay_mem.sv`]
-
-### PE Mesh Verification
-
-The PE mesh is tested with a reduced configuration so that the bottom carry-save output can be checked directly.
-
-[Figure 4.5 from report — Annotated waveform for `os8_pe_mesh.sv`]
-
-### Systolic Core Verification
-
-`os8_sa` is tested using complete matrix multiplications.
-
-The cases include:
-
-- identity matrix,
-- normal positive multiplication,
-- signed multiplication,
-- zero matrix.
-
-[Figure 4.6 from report — Annotated waveform for `os8_sa.sv`]
-
-### Command Register Verification
-
-The command register tests verify:
-
-- A pointer update,
-- B pointer update,
-- activation configuration,
-- execution command decoding,
-- operating mode,
-- response register capture.
-
-[Figure 4.7 from report — Annotated waveform for `os8_rocc_cmd_regs.sv`]
-
-### Controller Verification
-
-The controller test verifies:
-
-- reset,
-- A loading,
-- B loading,
-- signed byte interpretation,
-- C stores,
-- memory request and response sequencing.
-
-[Figure 4.8 from report — Annotated waveform for `os8_controller.sv`]
+The testbenches themselves can be found in the repository's [`verification/`](../verification/) directory.
 
 ---
 
-## 9. System-Level Verification
+## 8. System-Level Verification
 
-After module-level verification, the full accelerator is tested in Chipyard using Verilator.
+After RTL verification, the complete accelerator is integrated with RocketCore and tested in Chipyard using Verilator.
 
-`os8_test.c` runs on the simulated RocketCore.
-
-For each workload:
-
-1. Software creates input matrices.
-2. Normal C code computes a reference result.
-3. RoCC commands invoke the accelerator.
-4. OS8 computes and stores the hardware result.
-5. Software compares both outputs element by element.
-
-This verifies the entire path:
+The software test program is stored under:
 
 ```text
-software
-→ RocketCore
-→ custom instruction
-→ RoCC
-→ command registers
-→ controller
-→ memory
-→ systolic array
-→ output store
-→ software comparison
+software/
 ```
 
-The top-level `os8_wrapper` is therefore validated primarily through this end-to-end execution rather than only through a standalone wrapper waveform.
+with `os8_test.c` providing the main accelerator test and benchmark workload.
+
+At system level, the verification path is:
+
+```text
+C software
+    ↓
+RocketCore
+    ↓
+custom RISC-V instruction
+    ↓
+RoCC interface
+    ↓
+OS8 accelerator
+    ↓
+system memory
+    ↓
+software result comparison
+```
+
+For each test workload, software first generates or prepares the input matrices.
+
+A normal software matrix multiplication is used to generate a reference result.
+
+The same workload is then executed using OS8 through the RoCC custom instructions.
+
+After the accelerator stores its result in memory, the software compares the hardware output with the reference result element by element.
+
+Conceptually:
+
+```text
+Input Matrices
+      │
+      ├──────────────► Software Matrix Multiply ──► Reference C
+      │
+      └──────────────► OS8 Accelerator ──────────► Hardware C
+                                                   │
+Reference C ───────────────────────────────────────┤
+                                                   ▼
+                                                Compare
+```
+
+This verifies not only the arithmetic datapath, but the complete integration path including:
+
+- custom instruction execution,
+- RoCC command transfer,
+- command decoding,
+- controller operation,
+- memory transactions,
+- systolic computation,
+- output processing,
+- result storage.
 
 ---
 
-## 10. Benchmark and Functional Test Groups
+## 9. Functional and Performance Test Groups
 
-The software includes three matrix-size sweep benchmarks:
+The software test program also performs matrix-size sweeps used for functional verification and performance measurement.
 
-- Type 1A — 1×1 to 32×32, no explicit B reuse,
-- Type 1B — same sweep with 5× B reuse,
-- Type 1C — same sweep with 10× B reuse.
+Three primary benchmark configurations are used:
 
-All three groups pass:
+| Test | Matrix sizes | B reuse |
+|---|---|---:|
+| Type 1A | 1×1 to 32×32 | None |
+| Type 1B | 1×1 to 32×32 | 5× |
+| Type 1C | 1×1 to 32×32 | 10× |
 
-```text
-32 / 32
-```
+Each matrix size is checked against the software-generated reference result.
 
-correctness tests.
+The software also includes 8×8 CNN-style workloads containing cases such as:
 
-The software also contains 8×8 CNN-style tests using patterns such as:
-
-- random signed INT8 values,
-- 4-bit-style values,
+- signed INT8 values,
+- reduced-range values,
 - sparse matrices,
 - identity matrices,
-- external weights,
-- ReLU,
-- arithmetic right shift.
+- external weight data,
+- ReLU output processing,
+- arithmetic right shifting.
 
-This extends verification beyond simple dense positive matrix multiplication.
+These tests exercise both the basic matrix-multiplication datapath and accelerator features used in lightweight inference workloads.
 
 ---
 
-## 11. Verification Summary
+## 10. Verification Structure
 
-The project therefore verifies the design at three levels:
+The complete verification flow can therefore be divided into two main levels:
 
-### Arithmetic / Module Level
+```text
+RTL Verification
+    │
+    │ verification/*.sv
+    ▼
+Individual accelerator modules
+    │
+    ▼
+System Integration
+    │
+    │ Chipyard + Verilator
+    ▼
+RocketCore + RoCC + OS8
+    │
+    ▼
+Software reference comparison
+```
 
-Individual behaviour of PE arithmetic, final addition, activation and delay structures.
+The `verification/` directory contains the standalone SystemVerilog testbenches used for RTL validation.
 
-### Control / Integration Level
+The `software/` directory contains the processor-side software used for full-system functional testing and benchmarking.
 
-Command decoding, controller FSM, memory requests and systolic-core sequencing.
+Together, these verify the accelerator from individual RTL blocks through to execution from software running on RocketCore.
 
-### System Level
-
-Software-generated matrices, RocketCore execution, RoCC invocation and hardware/software result comparison.
-
-The benchmark and performance behaviour of the validated system is discussed in:
+The measured performance and synthesis characteristics of the validated design are discussed in:
 
 [Performance, Scalability and Synthesis](03-performance-scalability-and-synthesis.md)
