@@ -80,7 +80,7 @@ A13 meets B31  → accumulate A13 × B31
 A14 meets B41  → accumulate A14 × B41
 ```
 
-![alt text](image-9.png)
+
 ## 4. Overall System Architecture
 
 The accelerator is attached to a RISC-V RocketCore through the Rocket Custom Coprocessor interface.
@@ -92,7 +92,7 @@ The complete system contains:
 - RoCC interface,
 - accelerator.
 
-[Figure 3.2 from report — Overall system architecture]
+![alt text](image-11.png)
 
 RocketCore remains responsible for general program execution and workload orchestration.
 
@@ -106,19 +106,17 @@ The accelerator accesses data through the system memory path and returns complet
 
 The SystemVerilog accelerator is structured as:
 
-```text
 os8_wrapper
 ├── os8_rocc_cmd_regs
 ├── os8_controller
-├── os8_activation_unit
+│   └── os8_activation_unit
 └── os8_sa
     ├── os8_delay_mem ×2
     ├── os8_pe_mesh
     │   └── os8_pe ×64
     └── os8_final_cpa ×8
-```
 
-[Figure 3.5 from report — Communication between modules in the accelerator]
+![alt text](image-12.png)
 
 ### `os8_wrapper`
 
