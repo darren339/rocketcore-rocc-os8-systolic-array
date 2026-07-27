@@ -41,59 +41,51 @@ The best dataflow depends on workload characteristics.
 
 ### Output Stationary
 ## Output-Stationary Systolic Array
+## Output-Stationary Systolic Array
 
 The accelerator in this project uses an output-stationary (OS) dataflow.
 
-Recall that each element of the matrix product \(C = AB\) is calculated as
+Recall that matrix multiplication calculates each output element as
 
 $$
-C_{ij} = (AB)_{ij} = \sum_{k=1}^{m} A_{ik}B_{kj}
+C_{ij} = \sum_{k=1}^{m} A_{ik}B_{kj}
 $$
 
-where \(C_{ij}\) is formed by taking row \(i\) of matrix A and column \(j\) of matrix B, multiplying the corresponding elements, and accumulating the products across \(k\).
+This means that each output value $C_{ij}$ is formed by multiplying elements from row $i$ of matrix A with elements from column $j$ of matrix B, then accumulating those products over $k$.
 
-An output-stationary systolic array maps this computation directly onto a two-dimensional array of processing elements (PEs). Each PE at position \((i,j)\) is responsible for accumulating one output element \(C_{ij}\).
+In an output-stationary systolic array, each processing element (PE) is assigned to one output element $C_{ij}$, and that output remains associated with the same PE throughout the compute phase.
 
-For example, the PE responsible for \(C_{12}\) computes
+![alt text](image-10.png)
+
+The figure illustrates this using a 4×4 example.
+
+The blue A values enter from the left side of the array and move horizontally from one PE to the next. The red B values enter from the top and move vertically down the columns.
+
+For each PE, the corresponding A and B values meet over successive clock cycles.
+
+For example, the PE responsible for $C_{11}$ accumulates
 
 $$
-C_{12}
+C_{11}
 =
-A_{11}B_{12}
+A_{11}B_{11}
 +
-A_{12}B_{22}
+A_{12}B_{21}
 +
-A_{13}B_{32}
-+\cdots+
-A_{1m}B_{m2}.
+A_{13}B_{31}
++
+A_{14}B_{41}.
 $$
 
-The PE does not receive all of these operands simultaneously. Instead, the required values arrive over successive clock cycles as the matrices move through the array.
+The four products do not arrive at the PE at the same time. Instead, the A and B streams are deliberately staggered so that the correct pair reaches the PE during the same clock cycle.
 
-During computation:
+For $C_{11}$, the sequence is conceptually:
 
-- values from matrix A enter from the left side of the array,
-- A values propagate horizontally from one PE to the next,
-- values from matrix B enter from the top of the array,
-- B values propagate vertically down the PE columns,
-- whenever \(A_{ik}\) and \(B_{kj}\) meet at PE \((i,j)\), the PE multiplies them,
-- the resulting product is accumulated into the partial sum for \(C_{ij}\).
-
-Therefore, over successive values of \(k\), PE \((i,j)\) performs
-
-\[
-P_{ij}^{(k)}
-=
-P_{ij}^{(k-1)}
-+
-A_{ik}B_{kj},
-\]
-
-until every product required by the summation has been included.
-
-The key characteristic of the output-stationary dataflow is that this partial sum remains associated with the same PE throughout the compute phase. The A and B operands move through the array, while the output being accumulated stays stationary.
-
-Conceptually:
+```text
+A11 meets B11  → accumulate A11 × B11
+A12 meets B21  → accumulate A12 × B21
+A13 meets B31  → accumulate A13 × B31
+A14 meets B41  → accumulate A14 × B41
 
 
 ![alt text](image-9.png)
