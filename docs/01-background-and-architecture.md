@@ -46,9 +46,9 @@ The accelerator in this project uses an output-stationary (OS) dataflow.
 
 Recall that each element of the matrix product \(C = AB\) is calculated as
 
-\[
+$$
 C_{ij} = (AB)_{ij} = \sum_{k=1}^{m} A_{ik}B_{kj}
-\]
+$$
 
 where \(C_{ij}\) is formed by taking row \(i\) of matrix A and column \(j\) of matrix B, multiplying the corresponding elements, and accumulating the products across \(k\).
 
@@ -56,7 +56,7 @@ An output-stationary systolic array maps this computation directly onto a two-di
 
 For example, the PE responsible for \(C_{12}\) computes
 
-\[
+$$
 C_{12}
 =
 A_{11}B_{12}
@@ -66,7 +66,7 @@ A_{12}B_{22}
 A_{13}B_{32}
 +\cdots+
 A_{1m}B_{m2}.
-\]
+$$
 
 The PE does not receive all of these operands simultaneously. Instead, the required values arrive over successive clock cycles as the matrices move through the array.
 
@@ -95,23 +95,7 @@ The key characteristic of the output-stationary dataflow is that this partial su
 
 Conceptually:
 
-```text
-                         B values
-                            ↓
-                     B1j   B2j   B3j
-                            ↓
-              ┌─────────┬─────────┬─────────┐
-A row i  ────►│   PE    │   PE    │   PE    │────►
-              ├─────────┼─────────┼─────────┤
-              │   PE    │ PE(i,j) │   PE    │
-              ├─────────┼─────────┼─────────┤
-              │   PE    │   PE    │   PE    │
-              └─────────┴─────────┴─────────┘
-                            ↓
 
-                     Cij remains local
-                     during accumulation
-Or in a larger view:
 ![alt text](image-9.png)
 ## 4. Overall System Architecture
 
