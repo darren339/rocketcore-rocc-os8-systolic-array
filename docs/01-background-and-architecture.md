@@ -27,6 +27,8 @@ Systolic arrays are well suited to this because they combine:
 
 A systolic array consists of a grid of processing elements, or PEs. Each PE performs arithmetic on incoming operands and forwards data to neighbouring PEs.
 
+![alt text](image-6.png)
+
 Different dataflows decide which value is retained inside the PE and which values move.
 
 | Dataflow | Stationary value | Main advantage |
@@ -38,69 +40,79 @@ Different dataflows decide which value is retained inside the PE and which value
 The best dataflow depends on workload characteristics.
 
 ### Output Stationary
+## Output-Stationary Systolic Array
 
-OS8 uses output-stationary dataflow.
+The accelerator in this project uses an output-stationary (OS) dataflow.
+
+Recall that each element of the matrix product \(C = AB\) is calculated as
+
+\[
+C_{ij} = (AB)_{ij} = \sum_{k=1}^{m} A_{ik}B_{kj}
+\]
+
+where \(C_{ij}\) is formed by taking row \(i\) of matrix A and column \(j\) of matrix B, multiplying the corresponding elements, and accumulating the products across \(k\).
+
+An output-stationary systolic array maps this computation directly onto a two-dimensional array of processing elements (PEs). Each PE at position \((i,j)\) is responsible for accumulating one output element \(C_{ij}\).
+
+For example, the PE responsible for \(C_{12}\) computes
+
+\[
+C_{12}
+=
+A_{11}B_{12}
++
+A_{12}B_{22}
++
+A_{13}B_{32}
++\cdots+
+A_{1m}B_{m2}.
+\]
+
+The PE does not receive all of these operands simultaneously. Instead, the required values arrive over successive clock cycles as the matrices move through the array.
 
 During computation:
 
-- matrix A values enter from the left,
-- matrix B values enter from the top,
-- A moves horizontally,
-- B moves vertically,
-- the accumulated output associated with each PE remains local during the compute phase.
+- values from matrix A enter from the left side of the array,
+- A values propagate horizontally from one PE to the next,
+- values from matrix B enter from the top of the array,
+- B values propagate vertically down the PE columns,
+- whenever \(A_{ik}\) and \(B_{kj}\) meet at PE \((i,j)\), the PE multiplies them,
+- the resulting product is accumulated into the partial sum for \(C_{ij}\).
 
-[Figure 2.5 from report — Dataflow in a 4×4 output-stationary systolic array]
+Therefore, over successive values of \(k\), PE \((i,j)\) performs
 
-This is conceptually different from system-level B reuse. The PE array remains output stationary even when software chooses to load one B tile once and reuse it for several A matrices.
+\[
+P_{ij}^{(k)}
+=
+P_{ij}^{(k-1)}
++
+A_{ik}B_{kj},
+\]
 
-### Weight Stationary and Input Stationary
+until every product required by the summation has been included.
 
-The report also compares weight-stationary and input-stationary dataflows.
+The key characteristic of the output-stationary dataflow is that this partial sum remains associated with the same PE throughout the compute phase. The A and B operands move through the array, while the output being accumulated stays stationary.
 
-Weight stationary is attractive when the same weights are reused repeatedly. Input stationary is attractive when activations are reused repeatedly.
-
-[Figure 2.6 from report — Weight-stationary dataflow]
-
-[Figure 2.7 from report — Input-stationary dataflow]
-
-The comparison demonstrates that dataflow efficiency is workload-dependent rather than universal.
-
----
-
-## 3. Why OS8 Uses an 8×8 Array
-
-The project uses an 8×8 physical array.
-
-This gives:
+Conceptually:
 
 ```text
-8 × 8 = 64 processing elements
-```
+                         B values
+                            ↓
+                     B1j   B2j   B3j
+                            ↓
+              ┌─────────┬─────────┬─────────┐
+A row i  ────►│   PE    │   PE    │   PE    │────►
+              ├─────────┼─────────┼─────────┤
+              │   PE    │ PE(i,j) │   PE    │
+              ├─────────┼─────────┼─────────┤
+              │   PE    │   PE    │   PE    │
+              └─────────┴─────────┴─────────┘
+                            ↓
 
-The fixed tile size keeps the hardware compact and easy to verify while allowing larger matrix sizes to be handled through software tiling.
-
-The accelerator accepts signed INT8 operands and performs 32-bit accumulation.
-
-The processor software handles:
-
-- matrix dimensions larger than 8×8,
-- tile creation,
-- zero-padding,
-- repeated tile invocation,
-- accumulation across tile groups.
-
-This creates a clear hardware/software split:
-
-```text
-RocketCore / software
-    ↓
-tiling, padding, scheduling
-    ↓
-fixed 8×8 accelerator
-```
-
----
-
+                     Cij remains local
+                     during accumulation
+Or in a larger view:
+![alt text](image-9.png)
 ## 4. Overall System Architecture
 
 The accelerator is attached to a RISC-V RocketCore through the Rocket Custom Coprocessor interface.
@@ -110,7 +122,7 @@ The complete system contains:
 - RocketCore,
 - cache/memory hierarchy,
 - RoCC interface,
-- OS8 accelerator.
+- accelerator.
 
 [Figure 3.2 from report — Overall system architecture]
 
