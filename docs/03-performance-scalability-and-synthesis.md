@@ -18,7 +18,7 @@ The measured aggregate results were:
 
 [Table 4.9 from report — Summary of system-level verification and benchmarking]
 
-[Figure 4.12 from report / Speedup vs Matrix Size graph from poster]
+![alt text](image-15.png)
 
 The baseline case achieves 4.79× overall speedup.
 
@@ -60,8 +60,6 @@ The new edge tiles may initially contain many zero-padded or unused entries.
 Hardware cycles therefore increase sharply while useful arithmetic increases only slightly.
 
 This causes the speedup to drop before rising again.
-
-[Figure 4.12 from report / Speedup vs Matrix Size graph from poster]
 
 Multiples of eight tend to be favourable because they align directly with the physical tile dimensions:
 
@@ -453,8 +451,6 @@ The synthesis includes the full accelerator hierarchy, not just the PE mesh.
 | Total cell area | 240,619.98 |
 | Total area including estimated interconnect | 281,560.63 |
 
-[Figure 4.13 from report — Area report]
-
 ## Timing
 
 | Metric | Result |
@@ -465,8 +461,6 @@ The synthesis includes the full accelerator hierarchy, not just the PE mesh.
 | Status | MET |
 
 The reported critical path is located in the controller memory-address generation path.
-
-[Figures 4.14 and 4.15 from report — Timing report]
 
 This is important because the limiting path is not directly the PE arithmetic.
 
@@ -480,7 +474,6 @@ This is important because the limiting path is not directly the PE arithmetic.
 | Leakage power | 369.2892 mW |
 | Total estimated power | approximately 378.28 mW |
 
-[Figure 4.16 from report — Power report]
 
 Leakage dominates the estimate, which is consistent with the use of an LVT standard-cell library.
 
