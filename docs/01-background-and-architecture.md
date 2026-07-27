@@ -10,7 +10,7 @@ For matrix multiplication:
 
 each output element is calculated as the dot product between one row of matrix A and one column of matrix B.
 
-General-purpose processors can execute these operations, but repeated instruction handling, complex memory hierarchies and data movement introduce overhead. A domain-specific accelerator can instead map the regular MAC structure directly into hardware and execute many operations in parallel.
+General-purpose processors can execute these operations, but repeated instruction handling, memory access and data movement introduce overhead. A domain-specific accelerator can instead map the regular MAC structure directly into hardware and perform many operations in parallel.
 
 Systolic arrays are particularly suitable for this because they combine:
 
@@ -18,17 +18,17 @@ Systolic arrays are particularly suitable for this because they combine:
 - high parallelism,
 - local communication between neighbouring processing elements,
 - predictable data movement,
-- data reuse as operands move through the array.
+- reuse of operands as they move through the array.
 
 ---
 
 ## 2. Systolic Array Dataflows
 
-A systolic array consists of a regular grid of processing elements (PEs). Each PE performs arithmetic on incoming operands and passes data to neighbouring PEs in a controlled pattern.
+A systolic array consists of a regular grid of processing elements (PEs). Each PE performs arithmetic on incoming operands while data moves systematically between neighbouring PEs.
 
 ![General systolic array processor structure](../assets/image-6.png)
 
-Different systolic-array dataflows determine which values remain inside the PEs and which values move through the array.
+Different systolic-array dataflows determine which values remain stationary within the array and which values move between PEs.
 
 | Dataflow | Stationary value | Main advantage |
 |---|---|---|
@@ -36,7 +36,7 @@ Different systolic-array dataflows determine which values remain inside the PEs 
 | Weight stationary | Weight | Maximises weight reuse |
 | Input stationary | Input activation | Maximises input reuse |
 
-There is no universally optimal dataflow. The most suitable organisation depends on the workload and on which type of data is reused most frequently.
+There is no universally optimal dataflow. The appropriate choice depends on the workload and on which data movement is most beneficial to reduce.
 
 ---
 
@@ -52,15 +52,15 @@ $$
 
 where $C_{ij}$ is formed by multiplying the corresponding elements of row $i$ of matrix A and column $j$ of matrix B, then accumulating the products over $k$.
 
-In an output-stationary systolic array, each PE is associated with one output element $C_{ij}$. During the main compute phase, the partial sum for that output remains associated with the same PE while the A and B operands move through the array.
+In an output-stationary systolic array, each PE is associated with one output element $C_{ij}$. During the main computation, the partial result for that output remains associated with the same PE while A and B operands move through the array.
 
 ![Dataflow in a 4×4 output-stationary systolic array](../assets/image-10.png)
 
 The figure illustrates the operation using a 4×4 example.
 
-The **blue A values** enter from the left side of the array and propagate horizontally from PE to PE. The **red B values** enter from the top and propagate vertically down the PE columns.
+The **blue A values** enter from the left side of the array and move horizontally across the PE rows. The **red B values** enter from the top and move vertically down the PE columns.
 
-For each PE, the corresponding A and B operands arrive over successive clock cycles. Whenever a matching pair reaches the PE, the two operands are multiplied and the product is added to the partial sum already stored for that output.
+For each PE, the required A and B operands arrive over successive clock cycles. Whenever a matching pair reaches the PE, the two operands are multiplied and the product contributes to the partial sum associated with that output.
 
 For example, the PE responsible for $C_{11}$ computes
 
@@ -76,7 +76,9 @@ A_{13}B_{31}
 A_{14}B_{41}
 $$
 
-The four products do not enter the PE simultaneously. Instead, they arrive over successive cycles:
+The four products do not arrive simultaneously. Instead, the operand streams are staggered so that the appropriate pair reaches the PE during the same cycle.
+
+Conceptually:
 
 ```text
 A11 meets B11  → accumulate A11 × B11
@@ -87,7 +89,7 @@ A14 meets B41  → accumulate A14 × B41
 
 After the final pair has been processed, the accumulated value represents the completed $C_{11}$ result.
 
-The same operation takes place simultaneously across the other PEs. For example:
+The same computation occurs concurrently across the array. For example:
 
 ```text
 C12 = A11B12 + A12B22 + A13B32 + A14B42
@@ -95,213 +97,164 @@ C21 = A21B11 + A22B21 + A23B31 + A24B41
 C44 = A41B14 + A42B24 + A43B34 + A44B44
 ```
 
-The dashed timing lines in the figure show that different rows of A and columns of B are injected at different times. This deliberate staggering ensures that operands with the same $k$ index meet at the correct PE during the same cycle.
+The dashed timing lines in the figure show how different operand streams are injected at different times. This staggering ensures that values corresponding to the same $k$ term meet at the correct PE.
 
-The resulting computation moves through the array as a diagonal **systolic wavefront**.
+As computation progresses, activity therefore forms a diagonal **systolic wavefront** across the array.
 
-The defining behaviour of the output-stationary dataflow is therefore:
+The defining behaviour of output-stationary computation is:
 
 - A values move horizontally,
 - B values move vertically,
-- each PE accumulates one output $C_{ij}$,
-- the partial output remains local during the main compute phase.
+- each PE is associated with one output $C_{ij}$,
+- the partial output remains local during the main MAC phase.
 
-This reduces partial-sum movement because intermediate output values do not need to travel between PEs during every MAC operation.
+This reduces movement of intermediate output values while allowing A and B operands to be reused as they travel through neighbouring PEs.
 
-In OS8, this same principle is applied across an 8×8 PE array. The main architectural difference from a simple textbook OS PE is that OS8 maintains the accumulated value internally in **carry-save form**. After the MAC phase is complete, the sum and carry values are propagated toward the bottom of the array and converted into conventional 32-bit results by the final carry-propagate adder stage.
+OS8 applies this principle to an **8×8 array containing 64 processing elements**.
 
 ---
 
 ## 4. Overall System Architecture
 
-The accelerator is integrated with a RISC-V RocketCore through the **Rocket Custom Coprocessor (RoCC)** interface.
-
-The complete system contains:
-
-- RocketCore,
-- cache and memory hierarchy,
-- RoCC interface,
-- OS8 accelerator.
+OS8 is integrated with a RISC-V RocketCore through the **Rocket Custom Coprocessor (RoCC)** interface.
 
 ![Overall RocketCore and OS8 accelerator system architecture](../assets/image-11.png)
 
-RocketCore remains responsible for general program execution and workload orchestration.
-
-This includes tasks such as:
-
-- preparing matrix data,
-- dividing larger matrices into 8×8 tiles,
-- zero-padding incomplete tiles,
-- configuring the accelerator,
-- issuing accelerator commands,
-- combining results across multiple tile operations.
-
-OS8 performs the hardware matrix-multiplication kernel.
-
-The RoCC interface provides the control path between RocketCore and the accelerator, while accelerator memory requests access matrix data through the system memory hierarchy.
-
-This separates the system into two main roles:
+At a high level, the system consists of:
 
 ```text
-RocketCore / Software
-        │
-        │  workload scheduling
-        │  tiling and zero-padding
-        │  accelerator commands
-        ▼
-      RoCC
-        │
-        ▼
+Software
+    │
+    ▼
+RocketCore
+    │
+    ▼
+RoCC Interface
+    │
+    ▼
 OS8 Accelerator
-        │
-        │  data loading
-        │  systolic computation
-        │  output processing
-        ▼
-      Memory
+    │
+    ▼
+Memory Hierarchy
 ```
+
+RocketCore continues to execute the main program and manages the overall workload.
+
+Software is responsible for preparing matrices, dividing larger workloads into tiles and issuing the commands required to use the accelerator.
+
+OS8 performs the hardware-accelerated matrix-multiplication operations.
+
+The accelerator accesses matrix data through the processor's memory system, performs the requested computation and writes the resulting output back to memory.
+
+This allows the specialised datapath to operate alongside a general-purpose processor rather than replacing it.
 
 ---
 
-## 5. OS8 Hardware Hierarchy
+## 5. OS8 Accelerator Architecture
 
-The SystemVerilog accelerator is organised as:
+The OS8 accelerator can be viewed at a high level as three main functional parts:
 
 ```text
-os8_wrapper
-├── os8_rocc_cmd_regs
-├── os8_controller
-│   └── os8_activation_unit
-└── os8_sa
-    ├── os8_delay_mem ×2
-    ├── os8_pe_mesh
-    │   └── os8_pe ×64
-    └── os8_final_cpa ×8
+             RoCC
+              │
+              ▼
+      ┌─────────────────┐
+      │ Command /       │
+      │ Control Logic   │
+      └────────┬────────┘
+               │
+               ▼
+      ┌─────────────────┐
+      │ 8×8 Systolic    │
+      │ Compute Array   │
+      └────────┬────────┘
+               │
+               ▼
+      ┌─────────────────┐
+      │ Output          │
+      │ Processing      │
+      └────────┬────────┘
+               │
+               ▼
+             Memory
 ```
 
-![Internal OS8 accelerator module architecture](../assets/image-12.png)
+![Internal OS8 accelerator architecture](../assets/image-12.png)
 
-### `os8_wrapper`
+### Command and Control
 
-`os8_wrapper` is the top-level SystemVerilog boundary of the accelerator.
+The control portion receives accelerator commands from RocketCore and coordinates the major phases of an operation.
 
-It connects the external RoCC-facing interface to the internal accelerator hardware.
-
-The wrapper handles connections for:
-
-- RoCC command signals,
-- RoCC response signals,
-- memory requests,
-- memory responses,
-- accelerator busy status.
-
-It primarily acts as an integration layer between RocketCore/RoCC and the internal command, controller and compute modules.
-
----
-
-### `os8_rocc_cmd_regs`
-
-`os8_rocc_cmd_regs` receives the decoded RoCC command fields and stores the configuration required by the accelerator.
-
-It maintains:
-
-- A matrix pointer,
-- B matrix pointer,
-- C output pointer,
-- response destination register,
-- ReLU enable,
-- output shift amount,
-- operating mode.
-
-It also generates a one-cycle `start_pulse` when an execution command is accepted.
-
-The operating mode allows the memory-load, compute and store stages to be invoked either together or separately.
-
-This is important for data reuse because a previously loaded operand can remain resident while another operand is replaced.
-
----
-
-### `os8_controller`
-
-`os8_controller` is the main system-level sequencer of the accelerator.
-
-It controls the complete execution sequence, including:
-
-- loading matrix A,
-- loading matrix B,
-- retaining loaded A and B tiles,
-- starting the systolic-array core,
-- waiting for computation to finish,
-- selecting computed C elements,
-- sending results through the activation unit,
-- writing C back to memory,
-- generating the RoCC response,
-- collecting execution-cycle information.
-
-The ability to separate loading, computation and storage allows the accelerator to reuse previously loaded matrices across multiple operations.
-
-The `os8_activation_unit` is instantiated inside the controller and is used during the output-store path.
-
----
-
-### `os8_activation_unit`
-
-`os8_activation_unit` performs optional output post-processing before a computed result is written to memory.
-
-It first applies an arithmetic right shift:
+These include:
 
 ```text
-shifted = in_data >>> shift_amount
+Load operands
+      ↓
+Compute
+      ↓
+Process output
+      ↓
+Store result
 ```
 
-If ReLU is enabled and the shifted result is negative:
-
-```text
-out_data = 0
-```
-
-Otherwise:
-
-```text
-out_data = shifted
-```
-
-The resulting value is returned to the controller and packed into the memory-store data.
+The load, compute and store phases can also be controlled separately. This allows previously loaded operand data to be retained and reused across multiple computations.
 
 ---
 
-### `os8_sa`
+### Systolic Compute Array
 
-`os8_sa` is the main systolic-array compute core.
+The main datapath is an 8×8 output-stationary systolic array.
 
-It:
+It operates on signed INT8 matrix operands and accumulates results using a wider 32-bit representation.
 
-- receives complete 8×8 A and B tiles from the controller,
-- transposes B internally,
-- feeds A and transposed B through staggered delay memories,
-- generates the systolic wavefront,
-- controls the 8×8 PE mesh,
-- performs carry-save result propagation,
-- converts carry-save outputs using the final CPA stage,
-- produces the output matrix C,
-- asserts `done` when the tile computation is complete.
+Operand streams are staggered before entering the PE array so that the appropriate A and B elements meet at each PE during the correct cycle.
+
+During computation:
+
+```text
+A → → → → →
+      PE array
+B       ↓
+↓       ↓
+↓       ↓
+```
+
+A values propagate horizontally while B values propagate vertically.
+
+The 64 PEs operate concurrently, allowing many MAC operations to take place during each active compute cycle.
 
 ---
 
-## 6. Generating the Systolic Wavefront
+### Output Processing
 
-Correct systolic operation requires the appropriate A and B operands to reach each PE during the same clock cycle.
+After matrix computation is completed, the accelerator converts the accumulated results into conventional output values and optionally performs lightweight post-processing.
 
-If all rows of A and columns of B were injected simultaneously without any delay, operands belonging to different values of $k$ would meet at many PEs.
+The available output operations include:
 
-OS8 therefore uses two `os8_delay_mem` instances:
+- arithmetic right shifting,
+- ReLU activation.
 
-- one for matrix A,
-- one for the internally transposed matrix B.
+The processed values are then written back to memory.
 
-Each row is given an increasing initial delay.
+This allows basic inference-oriented post-processing to be performed without requiring RocketCore to handle every output element individually.
 
-Conceptually, the A stream behaves as:
+---
+
+## 6. Systolic Wavefront
+
+A key requirement of the architecture is ensuring that the correct operands arrive at each PE at the same time.
+
+Consider PE $(i,j)$, which must accumulate terms of the form
+
+$$
+A_{ik}B_{kj}.
+$$
+
+The two operands for a particular value of $k$ must therefore meet at that PE during the same computation cycle.
+
+To achieve this, different rows and columns are given progressively increasing delays before entering the array.
+
+For example, the A streams conceptually behave as:
 
 ```text
 A row 0:  A00 A01 A02 A03 ...
@@ -310,151 +263,157 @@ A row 2:          A20 A21 ...
 A row 3:              A30 ...
 ```
 
-The B streams are staggered in the corresponding direction.
+The B streams are staggered correspondingly.
 
-This timing arrangement creates the diagonal wavefront illustrated earlier in the output-stationary dataflow diagram.
+This produces the diagonal systolic wavefront shown earlier.
 
-As a result, PE $(i,j)$ receives the intended pair
+Once inside the array, A values continue horizontally and B values continue vertically, allowing each operand to contribute to multiple PE computations as it passes through the mesh.
 
-$$
-A_{ik}, B_{kj}
-$$
-
-during the same computation cycle.
-
-After multiplication, A continues to the next PE on the right and B continues to the PE below, allowing the same operands to contribute to additional output calculations as they travel through the mesh.
+The regular movement of data is one of the main advantages of the systolic-array architecture: communication is primarily local and follows a predictable structure.
 
 ---
 
-## 7. Processing Element Architecture
+## 7. Arithmetic Organisation
 
-Each `os8_pe` receives:
+The OS8 processing elements perform signed INT8 multiplication with 32-bit accumulation.
 
-- one signed INT8 A operand,
-- one signed INT8 B operand,
-- PE control signals,
-- carry-save propagation inputs from the PE above.
+Rather than repeatedly resolving the entire accumulated result through a conventional wide addition during every MAC operation, the architecture uses a **carry-save representation** during the compute phase.
 
-The PE performs four main operations:
-
-1. multiplies A and B,
-2. sign-extends the product to the accumulator width,
-3. accumulates the product using carry-save arithmetic,
-4. stores the accumulated result in one of two internal carry-save banks.
-
-This differs from a conventional MAC architecture that performs a full carry-propagate addition during every accumulation cycle.
-
----
-
-### CPA-Factored Accumulation
-
-A conventional accumulated MAC can be represented conceptually as:
+Conceptually, instead of immediately reducing every operation to:
 
 ```text
-accumulator = accumulator + A × B
+accumulator = accumulator + product
 ```
 
-A normal wide binary addition requires carry information to propagate through the adder.
-
-OS8 instead maintains the accumulated result in two components:
+the intermediate result is maintained as two components:
 
 ```text
 sum
 carry
 ```
 
-during the repeated MAC phase.
+These jointly represent the accumulated value.
 
-The two values jointly represent the accumulated output without requiring a complete carry-propagate addition for every product.
-
-Only after the result leaves the compute phase is the conventional binary value produced:
+After computation, the two components are combined to produce the final conventional binary result:
 
 ```text
 result = sum + carry
 ```
 
-This final addition is performed by `os8_final_cpa`.
+This organisation keeps the full carry-propagation operation outside the repeated accumulation process.
 
-The architecture therefore **factors the final carry-propagate addition out of the repeated PE accumulation path**.
+OS8 also provides separate internal storage for accumulation and result propagation, allowing completed carry-save values to move out of the array after computation.
+
+The detailed RTL implementation of this arithmetic organisation can be found in the [`rtl/`](../rtl/) directory.
 
 ---
 
-### Dual Carry-Save Banks
+## 8. Matrix Tiling
 
-Each PE contains two carry-save banks.
+The physical accelerator operates on fixed **8×8 matrix tiles**.
 
-Their roles are selected using `prop_sel`.
+A matrix that fits within 8×8 can be mapped directly to one hardware tile.
 
-One bank can serve as the active accumulation bank while the other is available for result propagation.
+If its dimensions are smaller than eight, unused entries are filled with zeros.
 
-During the output phase, `prop_shift` allows the selected carry-save pair to move downward through the PE column.
-
-Conceptually:
+For example:
 
 ```text
-PE row 0
-   │
-   │ sum + carry
-   ▼
-PE row 1
-   │
-   ▼
-PE row 2
-   │
-   ▼
+Original matrix
+
+a b c
+d e f
+
+        ↓ zero padding
+
+8×8 accelerator tile
+
+a b c 0 0 0 0 0
+d e f 0 0 0 0 0
+0 0 0 0 0 0 0 0
 ...
-   │
-   ▼
-bottom_sum
-bottom_carry
 ```
 
-This allows completed outputs to travel toward the bottom of the mesh while remaining in carry-save representation.
+Larger matrices are divided into multiple 8×8 tiles by software.
+
+Each tile is processed using the same fixed hardware array, and the resulting partial computations are combined as required to construct the complete matrix result.
+
+This approach allows a relatively small accelerator to support matrix dimensions larger than the physical PE array.
+
+It also means hardware utilisation depends on matrix dimensions. Sizes that align well with the 8×8 tile dimensions use more of the available PEs, while incomplete edge tiles contain padded operations.
 
 ---
 
-### Final Carry-Propagate Addition
+## 9. Data Reuse
 
-At the bottom of the PE mesh, each output column provides:
+The architecture allows operand loading to be separated from computation.
 
-```text
-bottom_sum
-bottom_carry
-```
+This makes it possible to keep an operand tile inside the accelerator while processing several other tiles.
 
-These are connected to `os8_final_cpa`.
-
-The final CPA performs:
+For example, instead of repeatedly performing:
 
 ```text
-result_out = sum_in + carry_in
+Load A1
+Load B
+Compute
+
+Load A2
+Load B
+Compute
+
+Load A3
+Load B
+Compute
 ```
 
-One final CPA is generated for each output column.
+the same B tile can be retained:
 
-The conventional signed 32-bit results are then captured into output matrix C.
+```text
+Load B once
+
+Load A1
+Compute
+
+Load A2
+Compute
+
+Load A3
+Compute
+```
+
+This reduces repeated data transfer when the same operand is needed across multiple matrix operations.
+
+Such behaviour is useful for inference workloads in which the same weight data may be applied to several input activations.
+
+This reuse occurs at the system scheduling and local-buffer level.
+
+The underlying systolic computation remains **output stationary**.
 
 ---
 
-## 8. Architectural Summary
+## 10. Architectural Summary
 
-The OS8 datapath combines:
+OS8 combines a general-purpose RISC-V processor with a specialised matrix-multiplication datapath.
 
+At a high level, the design provides:
+
+- RocketCore integration through RoCC,
 - an 8×8 output-stationary systolic array,
-- 64 parallel processing elements,
-- signed INT8 multiplication,
+- 64 parallel PEs,
+- signed INT8 matrix operands,
 - 32-bit accumulation,
-- staggered systolic input streams,
+- staggered systolic data movement,
 - carry-save accumulation,
-- dual carry-save banks,
-- factored final carry-propagate addition,
-- optional ReLU and right-shift output processing,
-- software-managed 8×8 tiling.
+- optional ReLU and output shifting,
+- software-managed 8×8 tiling,
+- support for operand reuse.
 
-The architecture deliberately separates general workload management from the fixed hardware compute engine.
+The processor is responsible for flexible workload management, while the accelerator performs the repetitive matrix arithmetic in parallel hardware.
 
-RocketCore and software provide flexibility, while OS8 provides a regular parallel datapath for the repeated matrix-multiplication kernel.
+The source RTL implementation is available in:
 
-For the processor command path, custom instructions, execution flow and verification methodology, continue to:
+[`rtl/`](../rtl/)
+
+Processor integration, custom commands, software execution and verification are described in:
 
 [Processor Integration, Operation and Verification](02-integration-operation-and-verification.md)
