@@ -78,7 +78,7 @@ A11 meets B11  → accumulate A11 × B11
 A12 meets B21  → accumulate A12 × B21
 A13 meets B31  → accumulate A13 × B31
 A14 meets B41  → accumulate A14 × B41
-
+```
 
 ![alt text](image-9.png)
 ## 4. Overall System Architecture
