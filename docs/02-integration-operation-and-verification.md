@@ -24,7 +24,7 @@ OS8 controller
 systolic datapath
 ```
 
-[Figure 3.4 from report — Command path from decode stage to accelerator]
+![alt text](image-13.png)
 
 ### Command Fields
 
@@ -58,21 +58,23 @@ are asserted together.
 
 ## 2. Custom Instruction Map
 
-| funct7 | Operation |
-|---:|---|
-| 0 | Set A pointer |
-| 1 | Set B pointer |
-| 2 | Set C pointer |
-| 3 | Load A, load B, compute, store C |
-| 7 | Configure ReLU and shift |
-| 8 | Load A only |
-| 9 | Load B only |
-| 10 | Compute using resident A and B |
-| 11 | Store C only |
-| 12 | Load A and B |
-| 13 | Compute and store C |
+## RoCC Custom Instruction Encoding
 
-[Table 3.1 from report — Summary of opcode operation and function code usage]
+The OS8 accelerator uses the RISC-V `custom0` opcode space for its RoCC commands.
+
+| [31:25] funct7 | [24:20] rs2 | [19:15] rs1 | [14:12] funct3 | [11:7] rd | [6:0] opcode | Operation |
+|---|---|---|---|---|---|---|
+| `0000000` | unused | A buffer address source register | `000` | unused | `0001011` | Provide A tile buffer address |
+| `0000001` | unused | B buffer address source register | `000` | unused | `0001011` | Provide B tile buffer address |
+| `0000010` | unused | C output tile address source register | `000` | unused | `0001011` | Provide C output tile buffer address |
+| `0000011` | unused | unused | `000` | response destination register | `0001011` | Load A, load B, compute, store C |
+| `0000111` | unused | activation configuration source register | `000` | unused | `0001011` | Configure activation unit |
+| `0001000` | unused | unused | `000` | response destination register | `0001011` | Load A tile only |
+| `0001001` | unused | unused | `000` | response destination register | `0001011` | Load B tile only |
+| `0001010` | unused | unused | `000` | response destination register | `0001011` | Compute stored A and B tile |
+| `0001011` | unused | unused | `000` | response destination register | `0001011` | Store computed C tile only |
+| `0001100` | unused | unused | `000` | response destination register | `0001011` | Load A and B tiles only |
+| `0001101` | unused | unused | `000` | response destination register | `0001011` | Compute and store C tile only |
 
 The separated operating modes are important because they allow the accelerator to keep one operand resident while another operand changes.
 
