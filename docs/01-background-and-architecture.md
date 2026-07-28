@@ -64,16 +64,8 @@ For each PE, the required A and B operands arrive over successive clock cycles. 
 
 For example, the PE responsible for $C_{11}$ computes
 
-$$
-C_{11}
-=
-A_{11}B_{11}
-+
-A_{12}B_{21}
-+
-A_{13}B_{31}
-+
-A_{14}B_{41}
+$$ 
+C_{11}=A_{11}B_{11}+A_{12}B_{21}+A_{13}B_{31}+A_{14}B_{41}
 $$
 
 The four products do not arrive simultaneously. Instead, the operand streams are staggered so that the appropriate pair reaches the PE during the same cycle.
