@@ -67,9 +67,6 @@ One further constraint matters for reading the timing result below: a `set_max_d
 of **0.76 ns** was applied to the controller-to-`mem_req_addr_reg` path. That exception, not the
 1.43 ns clock, is what the reported critical path is measured against.
 
-The constraint scripts themselves (`.synopsys_dc.setup`, `run.tcl`, `constraints.tcl`) are
-reproduced in full in Appendices A15 to A17 of the project report.
-
 ## Synthesis Flow
 
 The synthesis flow followed the general sequence below:
