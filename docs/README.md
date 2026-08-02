@@ -1,6 +1,6 @@
 # OS8 Technical Documentation
 
-This documentation is the long-form technical companion to the project poster and source code.
+This documentation is the long-form technical companion to the source code.
 
 Instead of splitting the project into many short pages, the documentation is consolidated into three larger sections:
 
@@ -13,4 +13,4 @@ Instead of splitting the project into many short pages, the documentation is con
 3. [Performance, Scalability and Synthesis](03-performance-scalability-and-synthesis.md)  
    Benchmark results, interpretation of the speedup behaviour, theoretical throughput, scalability with larger arrays and SRAM macros, and final synthesis results.
 
-The intention is that a reader can move from the poster to these documents and then directly into the RTL, Scala and C source code.
+The intention is that a reader can move from these documents directly into the RTL, Scala and C source code.

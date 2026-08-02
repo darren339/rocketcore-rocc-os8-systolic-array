@@ -67,6 +67,11 @@ One further constraint matters for reading the timing result below: a `set_max_d
 of **0.76 ns** was applied to the controller-to-`mem_req_addr_reg` path. That exception, not the
 1.43 ns clock, is what the reported critical path is measured against.
 
+The Design Compiler setup and constraint scripts are not distributed with this repository, since
+they contain installation-specific library paths. Everything needed to reconstruct the timing
+environment is stated above: the 1.43 ns clock, the constraint categories listed, and the 0.76 ns
+`set_max_delay` exception on the controller memory-address path.
+
 ## Synthesis Flow
 
 The synthesis flow followed the general sequence below:
@@ -114,9 +119,9 @@ The synthesised design contains:
 | Total area including estimated net interconnect | 281,560.63 µm² |
 
 The combinational and sequential counts do not sum to the reported total: 44,651 + 16,754 =
-61,405, leaving 938 cells unaccounted for. The report records no macros or black boxes, and the
-remaining 938 cells are consistent with the unmapped logic that Design Compiler flags at the end
-of the same report (RPT-7).
+61,405, leaving 938 cells unaccounted for. The area report records no macros or black boxes, and
+the remaining 938 cells are consistent with the unmapped logic that Design Compiler flags at the
+end of the same report (RPT-7).
 
 The combinational area is slightly larger than the sequential area because the accelerator
 contains substantial arithmetic and control logic.
@@ -158,7 +163,7 @@ This is an important result because the final timing limit was not located insid
 systolic-array PE arithmetic path. The control and memory-interface logic became the limiting
 path after synthesis.
 
-The report shows:
+The timing report shows:
 
 ```text
 Data arrival time:  0.72 ns
@@ -168,8 +173,8 @@ Slack:              0.00 ns  (MET)
 
 **The zero slack does not mean the accelerator has reached its frequency limit.** The required
 time on this path is not derived from the 1.43 ns clock. It is built up from the 0.76 ns
-`set_max_delay` exception applied to the controller memory-address registers in `run.tcl`, less
-0.02 ns of clock uncertainty and 0.02 ns of library setup time. The zero slack therefore records
+`set_max_delay` exception applied to the controller memory-address registers, less 0.02 ns of
+clock uncertainty and 0.02 ns of library setup time. The zero slack therefore records
 that this path exactly meets a constraint deliberately imposed on it during synthesis.
 
 Measured against the 1.43 ns clock alone, the same path would finish with roughly 0.67 ns to

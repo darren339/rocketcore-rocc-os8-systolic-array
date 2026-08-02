@@ -8,7 +8,7 @@ with Synopsys Design Compiler on the SAED32nm LVT library.
 
 This repository contains the complete RTL, the Scala/Chisel integration layer, the bare-metal
 test software, the standalone testbenches and the long-form technical documentation for the
-design. It accompanies a final-year undergraduate project report at Universiti Putra Malaysia.
+design. It was developed as a final-year undergraduate project at Universiti Putra Malaysia.
 
 ## Results at a glance
 
@@ -63,12 +63,23 @@ RISC-V toolchain and Verilator.
 
 ### 1. Install Chipyard
 
-Follow the [Chipyard setup guide](https://chipyard.readthedocs.io/) and confirm you can build
-and run the default Rocket configuration before adding OS8. Everything below assumes Chipyard
+This project was built and tested against **Chipyard 1.11.0**. Everything below assumes Chipyard
 is installed at `~/chipyard`.
 
-> Record the Chipyard version you used here. The Scala integration is written against the
-> Rocket Chip `BuildRoCC` interface, and that interface has changed between Chipyard releases.
+```bash
+git clone https://github.com/ucb-bar/chipyard.git ~/chipyard
+cd ~/chipyard
+git checkout 1.11.0
+```
+
+Complete the toolchain setup as described in the
+[Chipyard setup guide](https://chipyard.readthedocs.io/), and confirm the default Rocket
+configuration builds and runs before adding OS8.
+
+> **On other Chipyard versions.** The Scala integration targets the Rocket Chip `BuildRoCC`
+> interface as it stands in 1.11.0, and that interface has changed between releases. On a
+> different version, `Configs.scala` and `os8_matmul.scala` may need adjusting to match its
+> `BuildRoCC` signature and `LazyRoCC` constructor.
 
 ### 2. Copy the OS8 files into Chipyard
 
@@ -89,13 +100,29 @@ are appended to the existing files of those names, since both already exist in C
 
 ### 3. Build and run the simulation
 
+Build the simulator for the OS8 configuration:
+
 ```bash
 cd ~/chipyard/sims/verilator
 make CONFIG=OS8RocketConfig
 ```
 
-Build the test program, then run it against the generated simulator. `os8_test.c` prints the
-correctness result and the software-versus-hardware cycle counts for every workload.
+Build the bare-metal test binary:
+
+```bash
+cd ~/chipyard/tests
+make
+```
+
+Run the binary on the generated simulator:
+
+```bash
+cd ~/chipyard/sims/verilator
+make CONFIG=OS8RocketConfig run-binary BINARY=../../tests/os8_test.riscv
+```
+
+`os8_test.c` prints the correctness result and the software-versus-hardware cycle counts for
+every workload.
 
 ### 4. Run a standalone testbench
 
@@ -124,5 +151,6 @@ MIT. See [LICENSE](LICENSE).
 
 ## Citation
 
-> D. Chin Jian Hao, *Design and Validation of a RISC-V RocketCore MAC Operation Accelerator*,
-> final-year project report, Faculty of Engineering, Universiti Putra Malaysia, 2025/2026.
+> D. Chin Jian Hao, *OS8: Design and Validation of a RISC-V RocketCore MAC Operation
+> Accelerator*, Faculty of Engineering, Universiti Putra Malaysia, 2026.
+> https://github.com/darren339/rocketcore-rocc-os8-systolic-array

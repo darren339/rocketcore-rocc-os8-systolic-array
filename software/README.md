@@ -2,6 +2,13 @@
 
 This directory contains the bare-metal C-side workload and validation code used with the RocketCore + OS8 system.
 
+## Dependencies
+
+`os8_test.c` includes `rocc.h`, which supplies the `ROCC_INSTRUCTION_*` macros used to emit the
+custom0 instructions. That header is not part of this repository — it ships with Chipyard at
+`~/chipyard/tests/rocc.h`, which is the same directory `os8_test.c` is copied into, so no extra
+setup is needed. `external_weights.h` is provided here and must be copied alongside it.
+
 ## `os8_test.c`
 
 The main test program.

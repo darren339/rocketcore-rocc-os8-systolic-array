@@ -1,8 +1,7 @@
 # References and Related Work
 
 This project builds on established work in neural-network accelerator architecture, systolic
-arrays, RISC-V, Rocket Chip and RoCC. The project report discusses the following major topics
-and sources.
+arrays, RISC-V, Rocket Chip and RoCC. The major topics and sources are listed below.
 
 ## Neural-Network Accelerator Architecture
 
@@ -27,9 +26,9 @@ for MAC-heavy workloads.
   *Proc. IEEE Int. Symp. Performance Analysis of Systems and Software (ISPASS)*, 2019,
   pp. 304–315. [doi:10.1109/ISPASS.2019.00042](https://doi.org/10.1109/ISPASS.2019.00042)
 
-The report uses output-stationary, weight-stationary and input-stationary dataflows to explain
-how different choices trade operand reuse against partial-sum movement. OS8 is output-stationary;
-the reasoning behind that choice is in
+These sources cover the output-stationary, weight-stationary and input-stationary dataflows and
+how each trades operand reuse against partial-sum movement. OS8 is output-stationary; the
+reasoning behind that choice is in
 [Background and Architecture](../docs/01-background-and-architecture.md).
 
 ## Google TPU

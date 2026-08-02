@@ -2,8 +2,8 @@
 
 Standalone SystemVerilog testbenches for the OS8 accelerator. These run against the RTL on its
 own — no RocketCore, no Chipyard, no software. Each testbench applies a small set of directed
-testcases and prints or waveforms the result so it can be checked against the expected values in
-the project report.
+testcases and self-checks the result: each expected value is encoded in the testbench itself, and
+each run prints a per-testcase `PASS`/`FAIL` line followed by a final pass/fail tally.
 
 Full-system verification, where the accelerator is driven from C running on RocketCore and the
 output is compared against a software reference, is separate and lives in
@@ -43,5 +43,5 @@ Substitute the RTL files the testbench depends on — `tb_os8_sa.sv`, for exampl
 needs all nine modules. Any SystemVerilog simulator will do; the design uses no vendor-specific
 constructs.
 
-To inspect waveforms, dump a VCD or FST from the simulator and open it in GTKWave, which is how
-the annotated waveform figures in the project report were produced.
+The testbenches also dump a VCD, so the internal signal behaviour behind each `PASS` can be
+inspected directly in GTKWave or any other waveform viewer.

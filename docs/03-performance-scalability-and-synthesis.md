@@ -336,9 +336,9 @@ The synthesis includes the full accelerator hierarchy, not just the PE mesh.
 | Total cell area | 240,619.98 µm² |
 | Total area including estimated interconnect | 281,560.63 µm² |
 
-The combinational and sequential counts leave 938 cells unaccounted for. The report records no
-macros or black boxes, and that gap is consistent with the unmapped logic flagged at the end of
-the same report (RPT-7).
+The combinational and sequential counts leave 938 cells unaccounted for. The area report records
+no macros or black boxes, and that gap is consistent with the unmapped logic flagged at the end
+of the same report (RPT-7).
 
 ### Timing
 
