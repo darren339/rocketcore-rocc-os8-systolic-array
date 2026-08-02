@@ -246,7 +246,7 @@ verification/
 ├── tb_os8_pe_mesh.sv
 ├── tb_os8_rocc_cmd_regs.sv
 ├── tb_os8_sa.sv
-└── tb_os8_wrapper.sv
+└── tb_os8_wrapper_full.sv
 ```
 
 These are provided as the standalone RTL verification environment for the accelerator.

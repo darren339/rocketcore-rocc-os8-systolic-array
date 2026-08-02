@@ -1,0 +1,32 @@
+# Simulation output
+obj_dir/
+*.vcd
+*.fst
+*.fsdb
+*.vpd
+*.log
+ucli.key
+
+# Synthesis output — netlists and reports are regenerated, not tracked
+work/
+netlist/
+reports/
+command.log
+default.svf
+*.ddc
+*.mr
+*.pvl
+*.syn
+
+# Build artefacts
+*.o
+*.riscv
+*.dump
+*.elf
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*~

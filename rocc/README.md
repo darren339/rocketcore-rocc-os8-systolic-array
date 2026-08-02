@@ -65,4 +65,4 @@ OS8 memory requests         → Rocket RoCC memory port
 OS8 busy                    → Rocket accelerator busy
 ```
 
-See `docs/05-rocketcore-rocc.md` and `docs/06-custom-instructions.md` for the architectural explanation.
+See [RocketCore Integration, Operation and Verification](../docs/02-integration-operation-and-verification.md) for the architectural explanation.

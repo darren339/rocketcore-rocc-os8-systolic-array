@@ -1,25 +1,128 @@
-# Documentation
+# OS8 — An 8×8 Output-Stationary Systolic Array Accelerator for RISC-V RocketCore
 
-This directory contains the explanatory documentation for the OS8 accelerator.
+OS8 is a fixed 8×8 signed-INT8 matrix-multiplication accelerator with 32-bit accumulation,
+attached to a RISC-V RocketCore as a RoCC coprocessor in Chipyard. It uses an
+output-stationary systolic dataflow and a carry-save/CPA-factored processing element, supports
+operand reuse and ReLU, and has been verified at both RTL and full-system level and synthesised
+with Synopsys Design Compiler on the SAED32nm LVT library.
 
-The documentation is organised from general concepts to implementation details. A reader does not need prior knowledge of this project to begin with the first section.
+This repository contains the complete RTL, the Scala/Chisel integration layer, the bare-metal
+test software, the standalone testbenches and the long-form technical documentation for the
+design. It accompanies a final-year undergraduate project report at Universiti Putra Malaysia.
 
-## Suggested Reading Order
+## Results at a glance
 
-1. [Systolic arrays](01-systolic-arrays.md)
-2. [Output-stationary dataflow](02-output-stationary.md)
-3. [OS8 architecture](03-os8-architecture.md)
-4. [CPA-factored processing element](04-cpa-factored-pe.md)
-5. [RocketCore and RoCC](05-rocketcore-rocc.md)
-6. [Custom instructions](06-custom-instructions.md)
-7. [Operation flow](07-operation-flow.md)
-8. [Memory and reuse](08-memory-and-data-reuse.md)
-9. [Verification](09-verification.md)
-10. [Benchmarking](10-benchmarking.md)
-11. [Synthesis](11-synthesis.md)
+| | |
+|---|---|
+| Array | 8×8 output-stationary, 64 PEs |
+| Operands | signed INT8 in, 32-bit accumulation |
+| Host | RISC-V RocketCore via RoCC (`custom0`) |
+| Speedup, no operand reuse | 4.79× over software, 32/32 cases correct |
+| Speedup, B tile reused 10× | 18.15× over software, 32/32 cases correct |
+| Technology | SAED32nm LVT, Synopsys Design Compiler |
+| Target | 1.43 ns period, approximately 700 MHz |
+| Cell area | 240,619.98 µm² (281,560.63 µm² including estimated interconnect) |
+| Total estimated power | approximately 378.28 mW, leakage-dominated |
 
-## Scope
+Full numbers, and the caveats that go with them, are in
+[`docs/03-performance-scalability-and-synthesis.md`](docs/03-performance-scalability-and-synthesis.md)
+and [`synthesis/`](synthesis/).
 
-The OS8 accelerator is a fixed 8×8 signed-INT8 matrix-multiplication engine with 32-bit accumulation. It uses output-stationary systolic dataflow and a carry-save/CPA-factored arithmetic structure. It is attached to a RISC-V RocketCore as a RoCC coprocessor in Chipyard.
+## Repository layout
 
-The documentation focuses on how this specific implementation works rather than attempting to document all of Rocket Chip, Chipyard, RISC-V, or neural-network accelerator architecture.
+```text
+rtl/            SystemVerilog implementation of the accelerator (9 modules)
+rocc/           Scala/Chisel layer attaching OS8 to RocketCore through RoCC
+software/       Bare-metal C test program and benchmark workloads
+verification/   Standalone SystemVerilog testbenches, one per module
+synthesis/      Synthesis setup, flow and results
+docs/           Long-form technical documentation
+results/        Benchmark and synthesis result summaries
+references/     Related work and tools
+assets/         Figures used by the documentation
+```
+
+## Documentation
+
+The documentation is written to be read without prior knowledge of the project, in three parts:
+
+1. [Background and Architecture](docs/01-background-and-architecture.md) — why systolic arrays
+   suit this workload, how output-stationary dataflow works, and how the OS8 hardware is built.
+2. [RocketCore Integration, Operation and Verification](docs/02-integration-operation-and-verification.md)
+   — how RocketCore drives OS8 over RoCC, the custom instruction set, tiling and operand reuse,
+   and how the design was verified.
+3. [Performance, Scalability and Synthesis](docs/03-performance-scalability-and-synthesis.md) —
+   benchmark results, why the speedup curve behaves as it does, throughput and scaling analysis,
+   and the synthesis results.
+
+## Getting started
+
+OS8 is not a standalone project: its files are placed into an existing
+[Chipyard](https://github.com/ucb-bar/chipyard) checkout, which supplies Rocket Chip, the
+RISC-V toolchain and Verilator.
+
+### 1. Install Chipyard
+
+Follow the [Chipyard setup guide](https://chipyard.readthedocs.io/) and confirm you can build
+and run the default Rocket configuration before adding OS8. Everything below assumes Chipyard
+is installed at `~/chipyard`.
+
+> Record the Chipyard version you used here. The Scala integration is written against the
+> Rocket Chip `BuildRoCC` interface, and that interface has changed between Chipyard releases.
+
+### 2. Copy the OS8 files into Chipyard
+
+| From this repository | To |
+|---|---|
+| `rtl/*.sv` | `~/chipyard/generators/rocket-chip/src/main/resources/vsrc/` |
+| `rocc/os8_matmul.scala` | `~/chipyard/generators/rocket-chip/src/main/scala/tile/` |
+| `rocc/os8_wrapper.scala` | `~/chipyard/generators/rocket-chip/src/main/scala/tile/` |
+| `rocc/Configs.scala` | `~/chipyard/generators/rocket-chip/src/main/scala/subsystem/` |
+| `rocc/RocketConfigs.scala` | `~/chipyard/generators/chipyard/src/main/scala/config/` |
+| `software/os8_test.c` | `~/chipyard/tests/` |
+| `software/external_weights.h` | `~/chipyard/tests/` |
+
+`Configs.scala` and `RocketConfigs.scala` are fragments rather than whole files: their contents
+are appended to the existing files of those names, since both already exist in Chipyard.
+`Configs.scala` defines the `WithOS8RoCC` mixin, and `RocketConfigs.scala` defines the
+`OS8RocketConfig` configuration that uses it.
+
+### 3. Build and run the simulation
+
+```bash
+cd ~/chipyard/sims/verilator
+make CONFIG=OS8RocketConfig
+```
+
+Build the test program, then run it against the generated simulator. `os8_test.c` prints the
+correctness result and the software-versus-hardware cycle counts for every workload.
+
+### 4. Run a standalone testbench
+
+The testbenches in [`verification/`](verification/) need no processor and no Chipyard. Each one
+drives a single module directly. See [`verification/README.md`](verification/README.md) for what
+each covers and how to run them.
+
+## Custom instructions
+
+OS8 occupies the RISC-V `custom0` opcode space (`0001011`) and selects operations with `funct7`.
+Load, compute and store can be issued separately, which is what makes operand reuse possible —
+a B tile can stay resident across many multiplications. The full instruction map is in
+[`docs/02-integration-operation-and-verification.md`](docs/02-integration-operation-and-verification.md).
+
+## Status and scope
+
+This is a completed undergraduate project, not an actively maintained library. The design is
+deliberately small and fixed at 8×8 so that the entire RTL and integration path stays readable,
+rather than competing with generator-based accelerators such as
+[Gemmini](https://github.com/ucb-bar/gemmini). Reported area, timing and power are synthesis
+estimates for one specific setup — they are not post-layout or silicon results.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
+
+## Citation
+
+> D. Chin Jian Hao, *Design and Validation of a RISC-V RocketCore MAC Operation Accelerator*,
+> final-year project report, Faculty of Engineering, Universiti Putra Malaysia, 2025/2026.
